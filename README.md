@@ -36,7 +36,7 @@ gams
 ```
 
 ### Inspecting results
-Once the model run completes successfully, all results will be available in the “Output” directory. To generate the visualizations as used in the paper, Python scripts are provided in the repository, including shapefiles for the geospatial visualizations. All results presented in the paper are also provided in a descriptively prepared form in the <kbd>SRE_Results&Figures.rar</kbd>.
+Once the model run completes successfully, all results will be available in the “Output” directory. To generate the visualizations as used in the paper, Python scripts are provided in the repository, including shapefiles for the geospatial visualizations. All results presented in the paper are also provided in a descriptively prepared form in the <kbd>SRE_Results&Figures.rar</kbd>. The NTC graphic presented in the paper was created using QGIS (version 3.40); a corresponding project file is included with the results to enable easy reproduction or further editing.
 
 ### Licence and citation
 The contents of this forekd repository are made available under the MIT license. For details, refer to the LICENSE file in the main directory.
