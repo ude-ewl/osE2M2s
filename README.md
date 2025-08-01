@@ -26,7 +26,7 @@ $SETGLOBAL PATH_OUT C:\...\Output
 ```
 
 ### Full reproducibility (all SRE scenarios)
-The model uses predefined settings for the strength and the timing profile of the SRE. To activate a specific scenario, you must remove the asterisk (*) in front of the corresponding lines (253-268). For example, to simulate a scenario with 6.60% rebound concentrated during PV production hours (simultaneous), remove the asterisks before these lines. On a machine that meets the recommended system requirements, the full model run should complete in under one hour.
+The model uses predefined settings for the strength and the timing profile of the SRE. To locate the specific model adjustments, search the code (Ctrl + F) for keywords like “SRE” or the author’s initials “MD”. To activate a specific scenario, you must remove the asterisk (*) in front of the corresponding lines (253-268). For example, to simulate a scenario with 6.60% rebound concentrated during PV production hours (simultaneous), remove the asterisks before these lines. On a machine that meets the recommended system requirements, the full model run should complete in under one hour.
 
 ```text
 gams
