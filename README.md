@@ -1,5 +1,5 @@
 ### System requirements
-To run the model, you need GAMS version 40.1 or higher. It was tested with a CPLEX license, but any solver capable of handling linear problems should work. Python (version 3.9 or higher) is only required for post-processing and visualization, available in the <kbd>SRE_Results&Figures.rar</kbd> file. The Python packages used include <kbd>pandas</kbd>, <kbd>matplotlib</kbd>, and <kbd>gdxpds</kbd>. For smooth execution, at least 8 GB of RAM and 4 CPU cores are recommended. On such a machine, the run completes in under one hour.
+To run the model, you need GAMS version 40.1 or higher. It was tested with a CPLEX license, but any solver capable of handling linear problems should work. Python (version 3.9 or higher) is only required for post-processing and visualization, available in the <kbd>SRE_Results&Figures.rar</kbd> file. The Python packages used include <kbd>pandas</kbd>, <kbd>matplotlib</kbd>, and <kbd>gdxpds</kbd>. For smooth execution, at least 8 GB of RAM and 4 CPU cores are recommended. The NTC graphic presented in the paper was created using QGIS (version 3.40); a corresponding project file is included with the results to enable easy reproduction or further editing. All necessary preparations and installations should be completed within an hour.
 
 ### Folder layout
 The main driver file is named <kbd>E2M2s-SRE_run.gms</kbd> and located in the <kbd>E2M2s_RunModel&InputData_SRE.rar</kbd>. All input data is organized under the folder “Input”, which includes parameter files and structural definitions. After execution, the model automatically creates an “Output” that contains output files in GDX format.
@@ -26,7 +26,7 @@ $SETGLOBAL PATH_OUT C:\...\Output
 ```
 
 ### Full reproducibility (all SRE scenarios)
-The model uses predefined settings for the strength and the timing profile of the SRE. To activate a specific scenario, you must remove the asterisk (*) in front of the corresponding lines (253-268). For example, to simulate a scenario with 6.60% rebound concentrated during PV production hours (simultaneous), remove the asterisks before these lines. Only one SRE effect strength should be active at a time.
+The model uses predefined settings for the strength and the timing profile of the SRE. To activate a specific scenario, you must remove the asterisk (*) in front of the corresponding lines (253-268). For example, to simulate a scenario with 6.60% rebound concentrated during PV production hours (simultaneous), remove the asterisks before these lines. On a machine that meets the recommended system requirements, the full model run should complete in under one hour.
 
 ```text
 gams
@@ -36,7 +36,7 @@ gams
 ```
 
 ### Inspecting results
-Once the model run completes successfully, all results will be available in the “Output” directory. To generate the visualizations as used in the paper, Python scripts are provided in the repository, including shapefiles for the geospatial visualizations. All results presented in the paper are also provided in a descriptively prepared form in the <kbd>SRE_Results&Figures.rar</kbd>, within the <kbd>Results_raw.xlsx</kbd> file. The NTC graphic presented in the paper was created using QGIS (version 3.40); a corresponding project file is included with the results to enable easy reproduction or further editing.
+Once the model run completes successfully, all results will be available in the “Output” directory. To generate the visualizations as used in the paper, Python scripts are provided in the repository, including shapefiles for the geospatial visualizations. All results presented in the paper are also provided in a descriptively prepared form in the <kbd>SRE_Results&Figures.rar</kbd>, within the <kbd>Results_raw.xlsx</kbd> file.
 
 ### Licence and citation
 The contents of this forekd repository are made available under the MIT license. For details, refer to the LICENSE file in the main directory.
