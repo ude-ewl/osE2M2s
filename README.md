@@ -1,6 +1,6 @@
 ### System requirements
 
-To run the model, you need GAMS version 40.1 or higher. It was tested with a CPLEX license, but any solver capable of handling linear problems should work. Python (version 3.9 or higher) is only required for post-processing and visualization. The Python packages used include <kbd>pandas</kbd>, <kbd>matplotlib</kbd>, and <kbd>gdxpds</kbd>. For smooth execution, at least 8 GB of RAM and 4 CPU cores are recommended.
+To run the model, you need GAMS version 40.1 or higher. It was tested with a CPLEX license, but any solver capable of handling linear problems should work. Python (version 3.9 or higher) is only required for post-processing and visualization, available in the <kbd>SRE_Results&Figures.rar</kbd> file. The Python packages used include <kbd>pandas</kbd>, <kbd>matplotlib</kbd>, and <kbd>gdxpds</kbd>. For smooth execution, at least 8 GB of RAM and 4 CPU cores are recommended.
 
 ### Folder layout
 
@@ -35,7 +35,7 @@ For example, to simulate a scenario with 6.6% rebound concentrated during midday
 
 ### Inspecting results
 
-Once the model run completes successfully, all output data will be available in the “Output” directory. To generate the visualizations as used in the paper, Python scripts are provided in the repository. This script reads the model results and produces the figures in the required format and resolution.
+Once the model run completes successfully, all output data will be available in the “Output” directory. To generate the visualizations as used in the paper, Python scripts are provided in the repository. All results presented in the paper are also provided in a descriptively prepared form in the <kbd>SRE_Results&Figures.rar</kbd>, including shapefiles for the geospatial visualizations.
 
 ### Licence and citation
 
