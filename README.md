@@ -22,6 +22,12 @@ model_SREinE2M2s/
 
 Before running the model, you must manually adjust the input and output paths at the beginning of the file <kbd>E2M2s-SRE_run.gms</kbd>. Specifically, replace the placeholder paths assigned to the variables PATH_IN_DATA and PATH_OUT with the full paths to your local input and output directories.
 
+```text
+gams
+$SETGLOBAL PATH_IN_DATA C:\...\Input
+$SETGLOBAL PATH_OUT C:\...\Output
+```
+
 ### Full reproducibility (all SRE scenarios)
 
 The model uses predefined settings for the strength and timing of the SRE. To activate a specific scenario, you must remove the asterisk (*) in front of the corresponding lines in the parameter block:
