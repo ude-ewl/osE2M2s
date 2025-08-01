@@ -39,4 +39,4 @@ gams
 Once the model run completes successfully, all results will be available in the “Output” directory. To generate the visualizations as used in the paper, Python scripts are provided in the repository, including shapefiles for the geospatial visualizations. All results presented in the paper are also provided in a descriptively prepared form in the <kbd>SRE_Results&Figures.rar</kbd>, within the <kbd>Results_raw.xlsx</kbd> file.
 
 ### Licence and citation
-The contents of this forekd repository are made available under the MIT license. For details, refer to the LICENSE file in the main directory.
+The contents of this forked repository are made available under the MIT license. For details, refer to the LICENSE file in the main directory.
