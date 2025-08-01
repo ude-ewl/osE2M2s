@@ -24,8 +24,8 @@ The model has not been pre-run and must be executed manually before analysis. Be
 
 ```text
 gams
-$SETGLOBAL PATH_IN_DATA C:\...\Input
-$SETGLOBAL PATH_OUT C:\...\Output
+$SETGLOBAL PATH_IN_DATA C:\###...\Input
+$SETGLOBAL PATH_OUT C:\###...\Output
 ```
 
 ### Full reproducibility (all SRE scenarios)
