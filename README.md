@@ -3,6 +3,7 @@ To run the model, you need GAMS version 40.1 or higher. It was tested with a CPL
 
 ### Folder layout
 The main driver file is named <kbd>E2M2s-SRE_run.gms</kbd> and located in the <kbd>E2M2s_RunModel&InputData_SRE.rar</kbd>. All input data is organized under the folder “Input”, which includes parameter files and structural definitions. After execution, the model automatically creates an “Output” that contains output files in GDX format.
+If you only want to quickly review the core code adjustments, see <kbd>osE2M2s_v01.gms<kbd>.
 
 ### Quick start (demo)
 To run a quick test, first clone the GitHub repository. Then extract the archive <kbd>E2M2s_RunModel&InputData_SRE.rar</kbd> and open the folder <kbd>model_SREinE2M2s</kbd>, which contains the main model file <kbd>E2M2s-SRE_run.gms</kbd>. 
