@@ -1,5 +1,6 @@
 * osE2M2s: Version 1.0
-* Date: 12.02.2025
+* Date: 1st of September 2025
+* Adjusted by Mensur Delic (for the Solar Rebound Effect paper)
 *insert correct path before starting 
 $SETGLOBAL PATH_IN_DATA C:\...\Input
 $SETGLOBAL PATH_OUT C:\...\Output
@@ -245,6 +246,45 @@ $ifi '%h2_yearly%' == Yes        v_import_h2(zone)   "import of hydrogen"
 $ifi NOT '%h2_yearly%' == Yes        v_import_h2(node, time, zone)   "import of hydrogen"
 ;
 
+*---------------------------- For SRE (MD) --------------------------------------------
+scalar
+*Configure a specific effect strength (e.g. 6.60% SRE, 16.38% SRE or 33.00% SRE) and temporal distribution (share_simSRE for simultaneous, share_sweSRE for sweeping).
+
+SRE_effect_strength /0/
+*SRE_effect_strength /0.0660/
+*SRE_effect_strength /0.1638/
+*SRE_effect_strength /0.3300/
+
+share_simSRE /0/
+share_sweSRE /0/
+
+*share_simSRE /1/
+*share_sweSRE /0/
+
+*share_simSRE /0.5/
+*share_sweSRE /0.5/
+
+*share_simSRE /0/
+*share_sweSRE /1/
+;
+
+Parameters
+share_privatePV "percentage of PV installed on private households"
+out_demand_y_inclSRE(simyear, zone, product) "stores the total annual electricity demand, including additional consumption due to the SRE"
+out_demand_y_SRE(simyear,zone,product) "captures only the additional annual electricity demand directly attributable to the SRE"
+;
+
+Free Variables
+*Must also be declared as a formula below to ensure the model can reference its values dynamically based on input data and use them consistently when distributing sweeping SRE demand across time steps.
+pvAVG(heat_regio,node,time) "provides the normalized/avareged PV generation profile used to distribute sweeping SRE demand over the day"
+;
+
+* NOTE: To ensure the GAMS model compiles while the corresponding data input remains packaged as a ZIP, the fixed share of private-household PV, normally provided as a parameter from the data input (Par_share_privatePV; see `C:\Users\...\model_SREinE2M2s\Input\Inc_database\Par share_privatePV.inc`), is temporarily replaced with the mean across all countries and years; this simplification suppresses spatial and temporal variation.
+* For this compiled setup, the code can be executed with the test dataset from the main repository (https://github.com/ude-ewl/osE2M2s), included in `run_folder.zip`.
+* The code used for the final model runs reported in the paper is contained in `E2M2s_RunModel&InputData_SRE.rar`.
+share_privatePV = 0.3
+*---------------------------- For SRE (MD) --------------------------------------------
+
 *@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ EQUATIONS @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 equations
 *-------------------------------- Objective function and cost terms -------------------------------------------
@@ -328,7 +368,11 @@ $ifi NOT '%h2_yearly%' == Yes     eq_demand_h2(node, time, zone) "demand balance
          eq_import_constraint(zone) "restriction for third country imports"
          eq_max_import
 *-----------------------------------------------------------------------------------------------
+
+*---------------------------- For SRE (MD) --------------------------------------------
+eq_pv_avg(heat_regio,node,time) "Defines the normalized PV profile used to allocate sweeping SRE demand over time steps"
 ;
+*---------------------------- For SRE (MD) --------------------------------------------
 
 *------------------------------------- Objective function --------------------------------------
 eq_total_cost ..
@@ -578,6 +622,24 @@ eq_demand_el(node,time, zone)$(node_time(node, time))..
                  v_production(node, time, exist_plant, 'electricity'))
         +sum((heat_regio,exist_plant(power_plant, heat_regio)) $(heatregio_in_zone(heat_regio,zone) and power_plant_type(power_plant,'IGPTG')),
                  v_pump(node, time, exist_plant))
+                 
+*---------------------------- For SRE (MD) --------------------------------------------    
+*Simultaneous SRE
+*Adds additional demand in alignment with PV generation, concentrating load around midday.            
+        + sum((heat_regio, exist_plant(power_plant, heat_regio))$(heatregio_in_zone(heat_regio, zone) AND power_plant_type(power_plant, 'SUN')),
+        (cap_n_sunk(exist_plant) + cap_ref(exist_plant))
+        * PV(heat_regio, node, time)
+        * SRE_effect_strength *  share_privatePV * share_simSRE) 
+        
+*Sweeping SRE
+*Spreads additional demand evenly across the day based on an averaged PV profile.   
+        + sum((heat_regio, exist_plant(power_plant, heat_regio))$(heatregio_in_zone(heat_regio, zone) AND power_plant_type(power_plant, 'SUN')),
+        (cap_n_sunk(exist_plant) + cap_ref(exist_plant))
+        * pvAVG(heat_regio,node,time) 
+*       * sum((node1,time1)$node_time(node1, time1), prob_node(node1) * hour_resolution(time1) * freq_time(time1) * PV(heat_regio, node1, time1)) / sum((node1,time1)$node_time(node1, time1), prob_node(node1) * hour_resolution(time1) * freq_time(time1)) 
+        * SRE_effect_strength *  share_privatePV * share_sweSRE)
+*---------------------------- For SRE (MD) --------------------------------------------
+
        =e=
          sum((heat_regio,exist_plant(power_plant, heat_regio))$(heatregio_in_zone(heat_regio,zone)
                                                          and (not power_plant_type(power_plant,'IGHEATBOILER')) and (not power_plant_type(power_plant,'IGHEATPUMP'))
@@ -586,6 +648,12 @@ eq_demand_el(node,time, zone)$(node_time(node, time))..
 
         + sum(exist_line_CF(zzone, zone), v_transpo(node, time, exist_line_CF))
 ;
+
+*---------------------------- For SRE (MD) -------------------------------------------- 
+*Defines the normalized PV profile (pvAVG) used for sweeping SRE by averaging PV output.
+eq_pv_avg(heat_regio,node,time)$(node_time(node, time)).. pvAVG(heat_regio,node,time) =e= sum((node1,time1)$node_time(node1, time1), prob_node(node1) * hour_resolution(time1) * freq_time(time1) * PV(heat_regio, node1, time1)) / sum((node1,time1)$node_time(node1, time1), prob_node(node1) * hour_resolution(time1) * freq_time(time1))
+;
+*---------------------------- For SRE (MD) --------------------------------------------
 
 *Note: heat pumps have their own heat_regio (in the data), so that the demand is separate and can only be covered by hp.
 eq_demand_heat(node,time, heat_regio)$node_time(node, time)..
@@ -1041,7 +1109,20 @@ eq_max_demand_el(zone,time,node)$(node_time(node, time))..
          +sum((heat_regio,exist_plant(power_plant, heat_regio)) $(heatregio_in_zone(heat_regio,zone) and power_plant_type(power_plant,'IGHEATPUMP')),
                  v_production(node, time, exist_plant, 'electricity'))
 
+*---------------------------- For SRE (MD) --------------------------------------------
+*ensures total electricity demand accounts for all components, including SRE-induced rebound demand
+*Simultaneous SRE                 
+        + sum((heat_regio, exist_plant(power_plant, heat_regio))$(heatregio_in_zone(heat_regio, zone) AND power_plant_type(power_plant, 'SUN')),
+        (cap_n_sunk(exist_plant) + cap_ref(exist_plant)) * PV(heat_regio, node, time)
+        * SRE_effect_strength *  share_privatePV * share_simSRE) 
+        
+*Sweeping SRE        
+        + sum((heat_regio, exist_plant(power_plant, heat_regio))$(heatregio_in_zone(heat_regio, zone) AND power_plant_type(power_plant, 'SUN')),
+        (cap_n_sunk(exist_plant) + cap_ref(exist_plant))
+        *  pvAVG(heat_regio,node,time)    
+        * SRE_effect_strength *  share_privatePV * share_sweSRE)
 ;
+*---------------------------- For SRE (MD) --------------------------------------------
 
 *@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ MODEL @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 *static model
@@ -1140,6 +1221,11 @@ eq_co2_bound2
 *eq_import_constraint
 *eq_max_import
 *eq_min_gen
+
+*---------------------------- For SRE (MD) --------------------------------------------
+*Declares that the formula (used for sweeping SRE) is properly integrated into the optimization model.
+eq_pv_avg
+*---------------------------- For SRE (MD) --------------------------------------------
 /;
 plp_static.optfile = 26;
 
@@ -1168,6 +1254,8 @@ loop (simyear,
          display prob_node;
       prob_node_trans(node,node1) = b_prob_node_trans(simyear,node,node1);
       freq_trans(node,node1) = b_freq_trans(simyear,node,node1);
+      
+      
       
       cost_inv(power_plant)= cost_inv0(power_plant)*(1+gr_cost_inv)**(numyear(simyear) - 2010);
       cost_inv(inv_plant)$power_plant_type(inv_plant,'crc_biomass') = cost_inv0(inv_plant) * plant_degr_fct(simyear,inv_plant) * (1 + gr_cost_inv)**(numyear(simyear) - 2010);
