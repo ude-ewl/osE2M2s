@@ -1,23 +1,32 @@
 ### System requirements
-To run the model, you need GAMS version 40.1 or higher. It was tested with a CPLEX license, but any solver capable of handling linear problems should work. Python (version 3.9 or higher) is only required for post-processing and visualization, available in the <kbd>SRE_Results&Figures.rar</kbd> file. The Python packages used include <kbd>pandas</kbd>, <kbd>matplotlib</kbd>, and <kbd>gdxpds</kbd>. For smooth execution, at least 8 GB of RAM and 4 CPU cores are recommended. The NTC graphic presented in the paper was created using QGIS (version 3.40); a corresponding project file is included with the results to enable easy reproduction or further editing. All necessary preparations and installations should be completed within an hour.
+To run the model, you need <kbd>GAMS</kbd> version 40.1 or higher. It was tested with a CPLEX license, but any solver capable of handling linear problems should work. For quick, ad hoc inspection of results, a spreadsheet program (e.g., <kbd>Excel</kbd>) is also convenient, since many outputs are tabular and can be exported from GDX. Python (version 3.9 or higher) is only required for post-processing of the visualization; scripts and data are available in the <kbd>Supplementary material/</kbd> folder. The Python packages used include <code>pandas</code>, <code>matplotlib</code>, and <code>gdxpds</code>. The NTC map presented in the paper was created using <kbd>QGIS</kbd> (version 3.40); a corresponding project file is included with the results to enable reproduction or further editing. For smooth execution, at least 8 GB of RAM and 4 CPU cores are recommended. All necessary preparations and installations should be completed within an hour.
 
 ### Folder layout
-The main driver file is named <kbd>E2M2s-SRE_run.gms</kbd> and located in the <kbd>E2M2s_RunModel&InputData_SRE.rar</kbd>. All input data is organized under the folder “Input”, which includes parameter files and structural definitions. After execution, the model automatically creates an “Output” that contains output files in GDX format. If you only want to quickly review the core code adjustments, see <kbd>osE2M2s_v01.gms</kbd> in this forked room; it is adapted from the main room’s version.
+This repository contains three run files (one <kbd>.gms</kbd> for each temporal profile) together with shared inputs, a preconfigured output folder, and supplementary materials. All three temporal profiles (dynamic, simultaneous, and sweeping) can be computed with the same input dataset located in the <kbd>Input/</kbd> folder.
 
 ### Quick start (demo)
-To run a quick test, first clone the GitHub repository. Then extract the archive <kbd>E2M2s_RunModel&InputData_SRE.rar</kbd> and open the folder <kbd>model_SREinE2M2s</kbd>, which contains the main model file <kbd>E2M2s-SRE_run.gms</kbd>. 
+For a quick test, clone this repository and use the layout below as a guide:
 
 ```text
-model_SREinE2M2s/
-├─ E2M2s-SRE_run.gms        # main driver
-├─ Input/
-│  ├─ Inc_database/         # parameter *.inc files (costs, demand, …)
-│  └─ inc_structure/        # set & parameter declarations
-└─ Output/                  # gets created after running the model
-   ├─ GDX/                  # raw output (*.gdx)
+├─ Input/                                  # shared parameter and structure files for all profiles
+├─ Output/                                 # preconfigured output folder (filled automatically after execution)
+├─ Supplementary material/                 # underlying paper figure and data
+│  ├─ Additional demand/                         # SRE-induced extra demand (Fig. 2)
+│  ├─ CO2 abatement costs & CO2 prices/          # CO2 prices and abatement costs (Fig. 14)
+│  ├─ Electricity prices/                        # wholesale prices and deltas for maps (Figs. 7, 15, 16) and boxplots (Fig. 17)
+│  ├─ Installed capacity/                        # capacity mixes (Figs. 3, 10, 11)
+│  ├─ Meta-Study/                                # empirically observed rebound strengths (Fig. 1)
+│  ├─ Production/                                # generation mixes (Figs. 4, 12, 13)
+│  ├─ SRE patterns/                              # SRE phases (Fig. 8), schematic profiles (Fig. 9) and dynamic-profile derivation
+│  ├─ Total system costs/                        # system cost breakdowns (Fig. 6)
+│  ├─ Transmission congestion costs/             # congestion metrics with shadow values (Fig. 5)
+│  └─ Final_results.xlsx                         # underlying results (consolidated tables for quick spreadsheet checks)
+├─ dynamicSRE_E2M2s.gms                    # dynamic profile (data-driven mix of PV-aligned and off-peak)
+├─ simultaneousSRE_E2M2s.gms               # simultaneous profile (fully PV-aligned)
+└─ sweepingSRE_E2M2s.gms                   # sweeping profile (evenly distributed)
 ```
 
-The model has not been pre-run and must be executed manually before analysis. Before running, you have to adjust the input and output paths at the beginning of the file <kbd>E2M2s-SRE_run.gms</kbd>. Specifically, replace the placeholder paths assigned to the variables <kbd>PATH_IN_DATA</kbd> and <kbd>PATH_OUT</kbd> with the full paths to your local input and output directories.
+The model has not been pre-run and must be executed manually before analysis. Open one of the three run files (<kbd>dynamicSRE_E2M2s.gms</kbd>, <kbd>simultaneousSRE_E2M2s.gms</kbd>, or <kbd>sweepingSRE_E2M2s.gms</kbd>) depending on the rebound profile you want to simulate. Before execution, adjust the input and output paths defined at the beginning of the selected file. Replace the placeholder values of <code>PATH_IN_DATA</code> and <code>PATH_OUT</code> with the full paths to your local <kbd>Input/</kbd> and <kbd>Output/</kbd> directories:
 
 ```text
 gams
@@ -26,17 +35,20 @@ $SETGLOBAL PATH_OUT C:\...\Output
 ```
 
 ### Full reproducibility (all SRE scenarios)
-The model uses predefined settings for the strength and the timing profile of the SRE. To locate the specific model adjustments, search the code (Ctrl + F) for keywords like “SRE” or the author’s initials “MD”. To activate a specific scenario, you must remove the asterisk (*) in front of the corresponding lines (253-268). For example, to simulate a scenario with 6.60% rebound concentrated during PV production hours (simultaneous), remove the asterisks before these lines. On a machine that meets the recommended system requirements, the full model run should complete in under one hour.
+To locate the specific model adjustments, search the code (Ctrl+F) for keywords such as <code>SRE</code> or the author’s initials <code>MD</code>. The model uses predefined settings for the effect strength to be simulated. To activate a specific value, remove the asterisk <code>*</code> in front of the corresponding lines (253–256). For example, to simulate a scenario with 7.7% SRE, remove the asterisks before line 254:
 
 ```text
 gams
-*SRE_effect_strength /0.0660/
-*share_simSRE /1/
-*share_sweSRE /0/
+*SRE_effect_strength /0/
+SRE_effect_strength /0.077/
+*SRE_effect_strength /0.172/
+*SRE_effect_strength /0.33/
 ```
 
+The value <code>/0/</code> can be used for the reference scenario/baseline run without rebound. On a machine that meets the recommended system requirements, the full model run should be completed in about an hour.
+
 ### Inspecting results
-Once the model run completes successfully, all results will be available in the “Output” directory. To generate the visualizations as used in the paper, Python scripts are provided in the repository, including shapefiles for the geospatial visualizations. All results presented in the paper are also provided in a descriptively prepared form in the <kbd>SRE_Results&Figures.rar</kbd>, within the <kbd>Results_raw.xlsx</kbd> file.
+Once the model run completes, all results are written to the <kbd>Output/</kbd> directory in GDX format. The visualizations used in the paper can be reproduced with the Python materials in the <kbd>Supplementary material/</kbd> folders; geospatial figures include the necessary shapefiles and a <kbd>QGIS</kbd> project. For quick spreadsheet analysis, a curated summary of all results is available in <kbd>Supplementary material/Final_results.xlsx.</kbd>
 
 ### Licence and citation
-The contents of this forked repository are made available under the MIT license. For details, refer to the LICENSE file in the main directory.
+The contents of this repository are made available under the MIT license. For details, refer to the LICENSE file in the main directory.
