@@ -1,9 +1,8 @@
 * osE2M2s: Version 1.0
 * Date: 12.02.2025
-*insert correct path before starting
-*Test (MD)
-$SETGLOBAL PATH_IN_DATA C:\...\Input
-$SETGLOBAL PATH_OUT C:\...\Output
+*insert correct path before starting 
+$SETGLOBAL PATH_IN_DATA C:\Users\...\Input
+$SETGLOBAL PATH_OUT C:\Users\...\Output
 
 Option LP = cplex;
 Option iterlim = 10000000;
@@ -202,6 +201,11 @@ $ifi NOT '%h2_yearly%' == Yes   out_h2_price(simyear, node, time, zone)  "hydrog
         val_spill(simyear, node, time,spill, power_plant, bregio)
         out_h2_import_costs(simyear)                    "output parameter for total h2 import costs"
         out_v_import_h2_y(simyear, zone)                "output parameter for yearly h2 imports"
+
+*---------------------------- For V2G (MB) --------------------------------------------
+out_trans_shadow(simyear, zone, zzone) "Shadow value of the electricity transmission restriction “eq_transpo_CF” [€/MW]"
+*---------------------------- For V2G (MB) --------------------------------------------    
+
 $ifi NOT '%h2_yearly%' == Yes   out_v_import_h2(simyear, node, time, zone)      "output parameter for h2 imports"
 ;
 
@@ -632,7 +636,11 @@ $ifi '%h2_yearly%' == Yes                   v_production(node, time, exist_plant
 $ifi '%h2_yearly%' == Yes                    ;
 
 $ifi '%h2_yearly%' == Yes eq_max_import..
-$ifi '%h2_yearly%' == Yes   sum(zone$h2_import_zones(zone), v_import_h2(zone)) =L= max_cap_imports;
+*---------------------------- For V2G (MB) --------------------------------------------
+*If h2_yearly = Yes, sum yearly H2 imports across designated import zones and enforce a lower bound of max_cap_imports (note: =G= sets a minimum; use =L= for an upper cap)
+*We added this especially for the double gas price sensitivity to prevent the model from offsetting higher gas costs via unconstrained H2 imports, keeping the shock comparable across runs
+$ifi '%h2_yearly%' == Yes   sum(zone$h2_import_zones(zone), v_import_h2(zone)) =G= max_cap_imports;
+*---------------------------- For V2G (MB) --------------------------------------------
 
 *H2 demand on a time segment basis
 $ifi NOT '%h2_yearly%' == Yes       eq_demand_h2(node,time, zone)$(node_time(node, time))..
@@ -747,7 +755,12 @@ $OFFTEXT
 eq_MaxChargePower(node, time,month, exist_plant(power_plant, heat_regio))$(node_time(node, time) and month_time(month, time) and power_plant_type(power_plant, 'IGELECSTORAGE'))..
          v_pump(node, time, exist_plant) + v_pump_standing_neg(node,time,exist_plant) =l= 
 *                                                                                               pump_cap_fct(exist_plant,time)
-                                                                                                v_cap(exist_plant) * availability(power_plant, month) * iLoadPoss(time, power_plant);
+                                                                                                v_cap(exist_plant) * availability(power_plant, month) * iLoadPoss(time, power_plant)
+
+*---------------------------- For V2G (MB) --------------------------------------------
+*Ensures that the maximum charging power of EV-type storages is limited not only by the share of vehicles present in the node (iLoadPoss) but also by the empirical plug-in probability, so only the plugged-in fraction can actually charge
+        * iLoadPluginProb(time, power_plant);
+*---------------------------- For V2G (MB) --------------------------------------------
 
 *restriction for simultaneous EV-charging (smart charging); currently hardcoded with 0.1
 eq_MaxChargePower_Sim(node, time,month)$(node_time(node, time) and month_time(month, time))..
@@ -758,7 +771,11 @@ eq_MaxChargePower_Sim(node, time,month)$(node_time(node, time) and month_time(mo
 
 	=l= sum(exist_plant(power_plant, heat_regio)$(power_plant_type(power_plant, 'IGELECSTORAGE')
 	and not power_plant_type(power_plant, 'BATT_STO') and not power_plant_type(power_plant, 'HYDR_PS')),
-	v_cap(exist_plant)) * 0.1;
+*---------------------------- For V2G (MB) --------------------------------------------
+*The simultaneous charging constraint is no longer a fixed 10% of installed EV charging capacity but is proportional to the empirically derived plug-in probability, so the aggregate charging cap follows the observed availability patterns over the day
+   v_cap(exist_plant) * iLoadPluginProb(time, power_plant));
+* 0.1
+*---------------------------- For V2G (MB) --------------------------------------------
 
 *MaxChargePower for IGPTG
 eq_MaxChargePower_ptg(node, time, month, exist_plant(power_plant, heat_regio))$(node_time(node, time) and month_time(month, time) and power_plant_type(power_plant, 'IGPTG'))..
@@ -795,7 +812,12 @@ eq_pump_standing_neg_onlyPump(node,time,exist_plant(power_plant, heat_regio))$(n
 
 eq_MaxDischargePower(node, time,month, exist_plant(power_plant, heat_regio))$
                  (node_time(node,time) and month_time(month,time) and power_plant_type(power_plant, 'IGELECSTORAGE'))..
-         v_cap_onl(node, time, exist_plant) =l= v_cap(exist_plant) * availability(power_plant, month) * iLoadPoss(time,power_plant);
+         v_cap_onl(node, time, exist_plant) =l= v_cap(exist_plant) * availability(power_plant, month) * iLoadPoss(time,power_plant)
+
+*---------------------------- For V2G (MB) --------------------------------------------
+*Ensures that only the plugged-in share of the EV fleet can discharge into the grid; discharge capacity is scaled by both location (iLoadPoss) and plug-in probability, reflecting that vehicles not connected to a charger cannot provide V2G power         
+        * iLoadPluginProb(time, power_plant);
+*---------------------------- For V2G (MB) --------------------------------------------
 
 *upper bound for power production
 eq_prod_plant_ub(node, time, exist_plant(power_plant, heat_regio))$(node_time(node, time)
@@ -865,6 +887,12 @@ eq_reserve_cap_spinningNeg(node, time,month,  zone)$(node_time(node, time) and m
                  (v_production(node, time, exist_plant,'electricity')- min_load_fct(power_plant,heat_regio)* v_cap_onl(node, time, exist_plant))
          +              (v_cap(exist_plant)
 *                                               * pump_cap_fct(exist_plant,time)
+
+*---------------------------- For V2G (MB) --------------------------------------------
+*By multiplying with the introduced parameter, the model only counts the share of EV batteries that is actually plugged in as available for decremental spinning reserve (i.e. increasing charging when frequency is high)
+                       * iLoadPoss(time, power_plant)
+*---------------------------- For V2G (MB) --------------------------------------------
+
                                                 * iLoadPoss(time, power_plant)* availability(power_plant, month) - v_pump(node, time, exist_plant) - v_pump_standing_neg(node,time,exist_plant)))
                  =g= spin_fctNeg * sum(exist_plant(power_plant, heat_regio) $heatregio_in_zone(heat_regio,zone),v_production(node, time, exist_plant,'electricity'));
 
@@ -878,6 +906,12 @@ eq_reserve_cap_standingPos(node, time,month, country)$(node_time(node, time)and 
 *               Differenzierung IGELECSTORAGE (wegen iLoadPoss) und v_pump_standing_pos
                 +sum(exist_plant(power_plant, heat_regio)$(heatregio_in_country(heat_regio, country) and power_plant_type(power_plant, 'standing')
                                                  and (not power_plant_type(power_plant,'NoReserveCapGroup')) and power_plant_type(power_plant,'IGELECSTORAGE')),
+                                                 
+*---------------------------- For V2G (MB) --------------------------------------------
+*Ensures that only the plugged-in share of the EV fleet contributes to positive standing reserve (model no longer assumes that all parked vehicles can instantly ramp up their discharge power)
+               iLoadPluginProb(time, power_plant) *
+*---------------------------- For V2G (MB) --------------------------------------------
+
                  v_cap(exist_plant)*availability(power_plant, month)* iLoadPoss(time, power_plant) - v_cap_onl(node, time, exist_plant)
                                  +v_pump_standing_pos(node, time, exist_plant))
                                   =g= sum(zone_in_country(zone, country), res_fct_MRLpos * v_demand_max(zone, 'electricity'));
@@ -1110,7 +1144,10 @@ eq_prod_plant_ub5
 eq_prod_plant_ub_VRE
 eq_prod_plant_lb
 
-eq_BanVehicle2Grid
+*---------------------------- For V2G (MB) --------------------------------------------
+*For V2G scenarios, this constraint must be deactivated; otherwise vehicle batteries can only charge (unidirectional) but not discharge to the grid
+*eq_BanVehicle2Grid
+*---------------------------- For V2G (MB) --------------------------------------------
 
 eq_reserve_cap_spinningPos
 eq_reserve_cap_spinningNeg
@@ -1139,7 +1176,12 @@ eq_co2_bound2
 *eq_pump_onlyPumpH2
 
 *eq_import_constraint
-*eq_max_import
+
+*---------------------------- For V2G (MB) --------------------------------------------
+*Uncomment (activate) eq_max_import to enforce the hydrogen import constraint in this run
+eq_max_import
+*---------------------------- For V2G (MB) --------------------------------------------
+
 *eq_min_gen
 /;
 plp_static.optfile = 26;
@@ -1161,7 +1203,7 @@ loop (simyear,
 *========part 1) filling parameters for specific year and calculation of endogenous parameters=========================
 *======================================================================================================================
 *assignment of input parameters for the simulated year
-      fuel_price(primary_energy,zone)= b_fuel_price(simyear, primary_energy, zone)*(1+gr_cost_inv)**(numyear(simyear)-2010);
+      
       wind_onshore(bregio,node,time) = b_wind_onshore(simyear,bregio,node,time);
       wind_offshore(bregio,node,time) = b_wind_offshore(simyear,bregio,node,time);
       PV(bregio,node,time) = b_PV(simyear,bregio,node,time);
@@ -1215,6 +1257,27 @@ loop (simyear,
       idemand(time,power_plant)       = b_idemand(time, power_plant, simyear);
       iLoadPoss(time, power_plant)    = b_iLoadPoss(time, power_plant, simyear);
       iLoadSimultaneity(time, power_plant) =b_iLoadSimultaneity(time, power_plant, simyear);
+      
+*---------------------------- For V2G (MB) --------------------------------------------
+*These parameters hold the empirically estimated plug-in probabilities for the LOW (25%) AVG (61%) and FULL (100%) V2G scenarios and are used to scale the technically available charging and discharging power of vehicle batteries
+*To run one of these scenarios, uncomment (by setting an "*" at the beginning of a line) the corresponding assignment below; only one assignment can be active at a time.
+
+*    iLoadPluginProb(time, power_plant)    = b_iLoadPluginProb_25(time, power_plant, simyear);
+*    iLoadPluginProb(time, power_plant)    = b_iLoadPluginProb_61(time, power_plant, simyear);
+    iLoadPluginProb(time, power_plant)    = b_iLoadPluginProb_100(time, power_plant, simyear);
+
+*---------------------------- For V2G (MB) --------------------------------------------
+*Use the assignments below to run gas-price and battery-capacity sensitivities on top of a chosen plug-in-probability scenario: for a pure gas-price sensitivity, deactivate the reference fuel-price assignment and activate the doubled-gas-price line while keeping the reference bcap_ref active and all battery-capacity sensitivity lines commented
+*Battery-capacity sensitivities are obtained by deactivating the reference bcap_ref assignment and activating exactly one of the +50 GW or +100 GW battery-capacity lines; in this case b_fuel_price (without suffix) will usually remain active, but it can be replaced by b_fuel_price_doubleGAS if a combined gas-price-and-battery sensitivity is desired
+*If no sensitivity is required, keep only the first assignments based on b_fuel_price and bcap_ref (without any suffix) active and leave all sensitivity lines commented out, so that the model uses the reference fuel prices and reference installed capacities
+
+    fuel_price(primary_energy,zone)= b_fuel_price(simyear, primary_energy, zone)*(1+gr_cost_inv)**(numyear(simyear)-2010);
+*    fuel_price(primary_energy,zone)= b_fuel_price_doubleGAS(simyear, primary_energy, zone)*(1+gr_cost_inv)**(numyear(simyear)-2010);
+    
+    cap_ref(exist_plant(power_plant, heat_regio)) = bcap_ref(power_plant, heat_regio, simyear);
+*    cap_ref(exist_plant(power_plant, heat_regio)) = bcap_ref_50GWBAT(power_plant, heat_regio, simyear);
+*    cap_ref(exist_plant(power_plant, heat_regio)) = bcap_ref_100GWBAT(power_plant, heat_regio, simyear);
+*---------------------------- For V2G (MB) -------------------------------------------- 
 
 *calculate demand of each zone as internal demand of each zone plus trade balance with zones not included; i.e. foreign zones
       demand(time,zone,'electricity')= demand_Y(simyear,time,zone,'electricity')+ ex_foreign_trade(simyear,time,zone,'electricity');
@@ -1265,7 +1328,7 @@ loop (simyear,
                  = sum((primary_energy)$fuel(power_plant,primary_energy),co2factor(primary_energy)/eff_plant_min(power_plant, heat_regio));
 
 *        adding exogeneously defined capacity change to the usable capacities before modelling for the present period
-      cap_ref(exist_plant(power_plant, heat_regio)) = bcap_ref(power_plant, heat_regio, simyear);
+      
       cap_ref_heat(exist_plant(power_plant, heat_regio)) = bcap_ref_heat(power_plant, heat_regio, simyear);
 
       cap_res_wat(exist_plant(power_plant, heat_regio)) = bcap_res_wat(power_plant, heat_regio, simyear);
@@ -1572,7 +1635,7 @@ $ifi NOT '%h2_yearly%' == Yes  out_h2_price(simyear,node, time, zone) = eq_deman
 
 *       remember h2 imports
         out_h2_import_costs(simyear) = v_h2_cost.l;
-
+        
 $ifi '%h2_yearly%' == Yes        out_v_import_h2_y(simyear, zone) = v_import_h2.l(zone);
 $ifi NOT '%h2_yearly%' == Yes    out_v_import_h2(simyear, node, time, zone) = v_import_h2.l(node, time, zone);
 $ifi NOT '%h2_yearly%' == Yes    out_v_import_h2_y(simyear, zone) = sum((node,time)$node_time(node, time),
@@ -1582,6 +1645,13 @@ $ifi NOT '%h2_yearly%' == Yes    prob_node(node) * hour_resolution(time) * freq_
         out_fill_level_h_exp(simyear, time, exist_plant) = sum(node$node_time(node,time), prob_node(node)* v_fill_level_h.l(node, time, exist_plant));
 
         out_demand_max(simyear, bregio, product) = v_demand_max.l(bregio,product);
+        
+*---------------------------- For V2G (MB) --------------------------------------------
+*Export routine for transmission congestion costs: aggregates shadow values of eq_transpo_CF over time and nodes
+out_trans_shadow(simyear, zone, zzone)$exist_line_CF(zone, zzone) =
+    sum((node,time)$node_time(node,time),
+        eq_transpo_CF.m(node,time,zone,zzone) * prob_node(node) * hour_resolution(time) * freq_time(time));
+*---------------------------- For V2G (MB) --------------------------------------------
 
 *------------------------ Writing modelling results in GDX file ----------------
           
