@@ -1,6 +1,7 @@
 * osE2M2s: Version 1.0
 * Date: 12.02.2025
-*insert correct path before starting 
+*insert correct path before starting
+*Test (MD)
 $SETGLOBAL PATH_IN_DATA C:\...\Input
 $SETGLOBAL PATH_OUT C:\...\Output
 
