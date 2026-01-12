@@ -11,7 +11,7 @@ This repository contains one run file (<kbd>osE2M2s_V2G.gms</kbd>) together with
 ```
 ├─ Input/                                   # Shared parameter and structure files for all V2G scenarios and sensitivities
 ├─ MCMC/                                    # Plug-in probabilities and available battery capacities derived by scaling survey data (Figs. 1, 8, 9, 10)                           
-├─ Output/                                  # Preconfigured folder with automatically filled results after execution and prepared results of the paper
+├─ Output/                                  # Preconfigured folder that is automatically filled with the results after execution and already contains the prepared results of the paper
 ├─ Supplementary material/                          # Data, figures, and results used in the paper
 │  ├─ Abstract MCMC/                                # Visualizing the interdependencies through survey, MCMC-based simulation, and energy system modeling         
 │  ├─ Capacities/                                   # Capacity mix (Fig. 11)
