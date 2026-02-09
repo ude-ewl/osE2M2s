@@ -1,0 +1,14 @@
+R_BE
+R_DE
+R_EL
+R_ES
+R_FR
+R_HR
+R_HU
+R_IT
+R_NL
+R_PL
+R_PT
+R_RO
+R_SK
+R_UK
