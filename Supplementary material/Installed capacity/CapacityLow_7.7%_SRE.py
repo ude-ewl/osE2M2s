@@ -31,20 +31,13 @@ technologies = [
     "Other",
 ]
 colors = [
-    "#C6B866",
-    "#FEE484",
-    "#4FCFAD",
-    "#77BACC",
-    "#F3B1BC",
-    "#57C35E",
-    "#D5ACFE",
-    "#CA41B1",
-    "#5555ffff",
-    "#C1EAFE",
-    "#E47B38",
-    "#C7C7C7",
+    "#FEA233", "#FEE484",
+    "#4FCFAD", "#77BACC",
+    "#F3B1BC", "#57C35E",
+    "#D5ACFE", "#CA41B1",
+    "#5555ffff", "#C1EAFE",
+    "#FE748B", "#C7C7C7",
 ]
-
 absolute_data = {
     "REF": [
         [389, 628, 387, 169, 13, 23, 140, 89, 73, 176, 322, 24],
