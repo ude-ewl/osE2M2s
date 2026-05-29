@@ -1,0 +1,34 @@
+code,country,feed_in_tariff,investment_grant,fit_ct_per_kwh,guarantee_years,fullload_hours,investment_cost_eur_per_kwp,fit_source,investment_grant_source
+AL,Albania,1,0,9.72,15,1140.7,548.83,https://www.energy-community.org/dam/jcr:3f7e7552-a24e-43be-8031-039856b91444/RESProgressReport_Albania-2020-2021.pdf,
+AT,Austria,1,1,18.12,13,1111.9,842.39,https://www.oem-ag.at/de/oekostromneu/einspeisemengen/oekobilanzgruppe/,https://www.ris.bka.gv.at/GeltendeFassung.wxe?Abfrage=Bundesnormen&Gesetzesnummer=20007386&FassungVom=2022-04-26
+BA,Bosnia and Herzegovina,1,0,15.93,12,1270.7,529.45,https://www.oieiek.ba/garantovane-i-referentne-cijene/,
+BE,Belgium,1,1,8.5,15,989.3,853.89,https://www.energyprice.be/blog/photovoltaic-panels-near-the-end-of-the-compensation-scheme/,https://www.pv-magazine.com/2023/04/20/belgiums-flanders-region-launches-new-call-for-solar-rebates/
+BG,Bulgaria,1,1,10.68,20,1258.2,517.86,https://www.dker.bg/uploads/reshenia/2023/res_c_13_23.pdf,https://www.enpal.de/photovoltaik/foerderung
+CH,Switzerland,1,1,14,15,1097.6,942.13,https://www.energieheld.ch/solaranlagen/photovoltaik/einspeiseverguetung,https://www.energieheld.ch/solaranlagen/photovoltaik/foerderung
+CZ,Czech Republic,0,1,,,,582.3,https://renewablemarketwatch.com/blog/434-new-update-of-the-state-energy-concept-of-the-czech-republic-in-accordance-of-the-eu-s-climate-and-energy-targets,https://www.enpal.de/photovoltaik/foerderung
+DE,Germany,1,0,8.11,20,1012.3,870,https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/ErneuerbareEnergien/EEG_Foerderung/start.html,
+DK,Denmark,0,0,,,,819.37,,
+EE,Estonia,0,0,,,,556.99,,
+ES,Spain,0,1,,,,678.97,https://www.ceer.eu/documents/104400/-/-/6c2376e9-7072-a1c1-0b8e-7b7954e17264,https://www.enpal.de/photovoltaik/foerderung
+FI,Finland,0,0,,,,817.07,,
+FR,France,1,0,14.7,20,1084,780.24,https://www.statista.com/statistics/1097557/share-photovoltaic-electricity-generation-feed-in-tarif-france/,
+GB,United Kingdom,0,0,,,,821.67,http://www.res-legal.eu/search-by-country/united-kingdom/single/s/res-e/t/promotion/aid/feed-in-tariff-5/lastp/203/,
+GR,Greece,1,1,8,25,1295.2,632.94,http://www.res-legal.eu/search-by-country/greece/single/s/res-e/t/promotion/aid/feed-in-tariff-ii-pv-on-rooftops/lastp/139/,https://balkangreenenergynews.com/greece-launches-subsidy-program-for-rooftop-pv-with-batteries/
+HR,Croatia,1,0,,,,563.89,https://www.lichtblicke.jetzt/kroatien-ein-sonnenland-auf-dem-weg-zur-sonnenseite/,
+HU,Hungary,1,1,,,,566.19,"http://www.res-legal.eu/search-by-country/hungary/#:~:text=In%20Hungary%2C%20electricity%20from%20renewable,'green')%20premium%20applies.",https://www.enpal.de/photovoltaik/foerderung
+IE,Ireland,1,1,21,15,846.5,840.08,https://switcher.ie/gas-electricity/feed-in-tariffs/,https://www.enpal.de/photovoltaik/foerderung
+IT,Italy,1,0,8,1,1263.9,713.5,https://www.adattivagaseluce.it/rassegna-stampa/fotovoltaico-dal-2024-potrai-vendere-lenergia-che-non-consumi,
+LT,Lithuania,1,1,,,,556.99,,https://www.enpal.de/photovoltaik/foerderung
+LU,Luxembourg,1,1,14.61,15,960.7,853.89,https://www.sudstroum.lu/de/hauptseite-kundenservice/photovoltaische-anlage/,https://www.sudstroum.lu/de/hauptseite-kundenservice/photovoltaische-anlage/
+LV,Latvia,1,1,,,,556.99,,https://www.enpal.de/photovoltaik/foerderung
+ME,Montenegro,1,0,15,12,1171.1,537.53,https://www.gov.me/en/documents/38d5c8ca-c1d0-4a6f-964f-106f7a77bdc1,
+MK,North Macedonia,1,0,16,15,1223.7,481.15,http://www.res-legal.eu/search-by-country/macedonia/single/s/res-e/t/promotion/aid/feed-in-tariff-12/lastp/486/,
+NL,Netherlands,0,0,,,,853.89,https://www.ceer.eu/documents/104400/-/-/6c2376e9-7072-a1c1-0b8e-7b7954e17264,
+NO,Norway,0,0,,,,826.22,,
+PL,Poland,1,1,,,,563.89,,https://www.enpal.de/photovoltaik/foerderung
+PT,Portugal,1,1,4.5,20,1434.7,609.92,https://zukunftskommunen.de/blog/auch-in-portugal-regionale-buergerenergie-im-kommen/,https://www.enpal.de/photovoltaik/foerderung
+RO,Romania,0,1,,,,536.27,https://www.ceer.eu/documents/104400/-/-/6c2376e9-7072-a1c1-0b8e-7b7954e17264,https://www.enpal.de/photovoltaik/foerderung
+RS,Serbia,1,0,14.7,12,1283.2,545.93,http://www.res-legal.eu/search-by-country/serbia/single/s/res-e/t/promotion/aid/feed-in-tariff-15/lastp/478/,
+SE,Sweden,0,1,,,,819.37,https://iea-pvps.org/wp-content/uploads/2020/08/NSR_Sweden_2019.pdf,https://www.enpal.de/photovoltaik/foerderung
+SI,Slovenia,1,1,,,,563.89,,https://balkangreenenergynews.com/slovenia-to-incentivize-installation-of-batteries-for-prosumers/
+SK,Slovakia,1,1,8.5,15,1227.5,566.19,http://www.res-legal.eu/search-by-country/slovakia/single/s/res-e/t/promotion/aid/feed-in-tariff-6/lastp/187/,https://www.enpal.de/photovoltaik/foerderung

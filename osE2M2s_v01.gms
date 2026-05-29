@@ -1,5 +1,5 @@
 * osE2M2s: Version 1.0
-* Date: 12.02.2025
+* Date: 29.05.2026
 *insert correct path before starting 
 $SETGLOBAL PATH_IN_DATA C:\...\Input
 $SETGLOBAL PATH_OUT C:\...\Output
@@ -16,6 +16,7 @@ $onecho > cplex.o26
 lpmethod 4
 aggind 0
 solutiontype 2
+barepcomp 1.0e-08
 $offecho
 
 *---------------- Switch for h2 demand --------------------------------------------------
@@ -121,7 +122,14 @@ scalar res_fct_MRLNeg "Proportion of peak load which is considered for neg terti
 *-----------------------------------------------------------------------------------------------
 
 * ------------------------- Scalar for storage--------------------------------------------------
-scalar fullload_discharge "fullload_discharge represents the ratio of storage capacity and power (duration of discharge at full load)" /3/;
+*scalar fullload_discharge "fullload_discharge represents the ratio of storage capacity and power (duration of discharge at full load)" /3/;
+
+*---------------------------- For discounting (MB) --------------------------------------------
+* Split battery storage into residential (prosumer) and utility scale, which differ in typical
+* energy-to-power ratio: prosumer systems are sized for ~2.5h, utility systems for ~4h at full load
+scalar fullload_discharge_prosumer "discharge duration at full load for BATT_STO_PROSUMER (residential, shorter duration)" /2.5/;
+scalar fullload_discharge_utility "discharge duration at full load for BATT_STO_UTILITY (utility-scale, longer duration)" /4/;
+*---------------------------- For discounting (MB) --------------------------------------------
 
 *----------------------------- Calculated parameters -------------------------------------------
 Parameters
@@ -154,8 +162,359 @@ Parameters
         h2_costs_import    "container for h2 import costs"
 ;
 
-*Calculation of annuity factors for each technology using exponential discounting
-annuity(power_plant) = ir(power_plant)/(1-(1+ir(power_plant))**(-lifetime(power_plant)));
+*---------------------------- For discounting (MB) --------------------------------------------
+*==============================================================================
+* DISCOUNTING AND SUPPORT MECHANISM SCENARIO SELECTION
+*==============================================================================
+* Choose one scenario by setting SCENARIO to one of the following:
+* 01. exp            : Exponential discounting, NO support (Baseline)
+* 02. exp_upfront    : Exponential discounting, upfront payment support
+* 03. exp_feedin     : Exponential discounting, feed-in tariff support
+* 04. hyp            : Hyperbolic discounting, NO support (Baseline)
+* 05. hyp_upfront    : Hyperbolic discounting, upfront payment support
+* 06. hyp_feedin     : Hyperbolic discounting, feed-in tariff support
+* 07. hyp_feedin_eq  : Hyperbolic discounting, feed-in with equivalent annuity
+*==============================================================================
+
+$setglobal SCENARIO hyp_upfront
+
+*==============================================================================
+* COMMON DECLARATIONS (ALL SCENARIOS)
+*==============================================================================
+
+* Start implementation of heterogenous discount rates
+Set disc /exponential,hyperbolic/;
+
+* Different discounting sets per scenario
+$if %SCENARIO% == exp            $setglobal DISC_FILE Set disc_exp.inc
+$if %SCENARIO% == exp_upfront    $setglobal DISC_FILE Set disc_exp.inc
+$if %SCENARIO% == exp_feedin     $setglobal DISC_FILE Set disc_exp.inc
+$if %SCENARIO% == hyp            $setglobal DISC_FILE Set disc_hyp.inc
+$if %SCENARIO% == hyp_upfront    $setglobal DISC_FILE Set disc_hyp.inc
+$if %SCENARIO% == hyp_feedin     $setglobal DISC_FILE Set disc_hyp.inc
+$if %SCENARIO% == hyp_feedin_eq  $setglobal DISC_FILE Set disc_hyp.inc
+
+Set disc_scenario(power_plant,disc) "used discounting scenario per power plant/technology"
+/
+$INCLUDE "%PATH_IN_DATA%\inc_database\%DISC_FILE%"
+/;
+
+Set yy /y1*y200/;
+Parameter yyy(yy)
+/
+$INCLUDE "%PATH_IN_DATA%\inc_database\Par yyy.inc"
+/;
+
+Parameter rn(yy) time variable discount rate;
+Parameter ann(yy) calculated annuity factor using hyperbolic discounting;
+Parameter ann_sup(yy) calculated annuity factor using hyperbolic discounting;
+Parameter annuity_sup(power_plant);
+Parameter annuity_support(power_plant);
+Parameter df(yy) annual discount factor;
+*HB: Henderson and Batemen with a short-term discount rate of 21%
+Scalar rh discount rate for the first year /0.21/;
+
+* Calculation of support payments (included in the cost function below)
+Parameter upfront_payment(power_plant) "upfront support payment as share of investment costs"
+/
+$INCLUDE "%PATH_IN_DATA%\inc_database\Par upfront_payment.inc"
+/;
+
+Parameter fullloadhours(simyear, power_plant, bregio, product) calculated full load hours for determination of feed-in payments;
+fullloadhours(simyear, power_plant, bregio, 'electricity')$power_plant_type(power_plant, 'SUN') = 
+    sum((node,time)$node_time(node, time), 
+        b_prob_node(simyear,node)*hour_resolution(time)*freq_time(time)*b_PV(simyear,bregio,node,time));
+
+* Support scenario is used to run scenarios with different support mechanisms
+Set support /upfront,feedin/;
+Parameter support_scen(support);
+Parameter feedintariff(simyear, power_plant, bregio, product) calculated feed-in tariff equivalent to upfront payment;
+Parameter support_payment0(simyear, power_plant, bregio, product) net present value of support payment;
+Parameter support_payment(power_plant, bregio) calculated parameter for the respective simyear;
+
+*==============================================================================
+* SCENARIO-SPECIFIC CONFIGURATIONS
+*==============================================================================
+
+*------------------------ NO SUPPORT SCENARIOS (BASELINES) -------------------
+$if %SCENARIO% == exp $goto EXP
+$if %SCENARIO% == hyp $goto HYP
+
+*------------------------ EXPONENTIAL SCENARIOS ------------------------------
+$if %SCENARIO% == exp_upfront $goto EXP_UPFRONT
+$if %SCENARIO% == exp_feedin $goto EXP_FEEDIN
+
+*------------------------ HYPERBOLIC SCENARIOS -------------------------------
+$if %SCENARIO% == hyp_upfront $goto HYP_UPFRONT
+$if %SCENARIO% == hyp_feedin $goto HYP_FEEDIN
+$if %SCENARIO% == hyp_feedin_eq $goto HYP_FEEDIN_EQ
+
+*==============================================================================
+* SCENARIO 1: EXPONENTIAL DISCOUNTING, NO SUPPORT (BASELINE)
+*==============================================================================
+$label EXP
+
+* Calculation of annuity factors for each technology using exponential discounting
+annuity(power_plant)$disc_scenario(power_plant, 'exponential') = 
+    ir(power_plant)/(1-(1+ir(power_plant))**(-lifetime(power_plant)));
+
+* For non-support scenarios, set annuity_support equal to annuity for consistency
+annuity_support(power_plant) = annuity(power_plant);
+
+* Feed-in tariff calculation (not used in no-support scenario but defined)
+feedintariff(simyear, power_plant, bregio, 'electricity')$(power_plant_type(power_plant, 'SUN') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    (cost_inv0(power_plant)*upfront_payment(power_plant))/(fullloadhours(simyear, power_plant, bregio, 'electricity')*
+    sum(yy$(ord(yy)<lifetime(power_plant)+1),1/((1+ir(power_plant))**yyy(yy))));
+
+* Support mechanism: NO support (baseline)
+support_scen('upfront') = 0;
+support_scen('feedin') = 0;
+
+support_payment0(simyear,power_plant,bregio,'electricity')$(support_scen('upfront')=1 and power_plant_type(power_plant, 'SUN_ROOFTOP')) = 
+    cost_inv0(power_plant)*upfront_payment(power_plant);
+
+support_payment0(simyear,power_plant,bregio,'electricity')$((support_scen('feedin')=1) and power_plant_type(power_plant, 'SUN_ROOFTOP') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    feedintariff(simyear, power_plant, bregio, 'electricity') * fullloadhours(simyear, power_plant, bregio, 'electricity') * (1/annuity(power_plant));
+
+$goto END_SCENARIO
+
+*==============================================================================
+* SCENARIO 2: EXPONENTIAL DISCOUNTING + UPFRONT PAYMENT
+*==============================================================================
+$label EXP_UPFRONT
+
+* Calculation of annuity factors for each technology using exponential discounting
+annuity(power_plant)$disc_scenario(power_plant, 'exponential') = 
+    ir(power_plant)/(1-(1+ir(power_plant))**(-lifetime(power_plant)));
+
+* For non-15-year scenarios, set annuity_support equal to annuity
+annuity_support(power_plant) = annuity(power_plant);
+
+* Feed-in tariff calculation (not used in upfront scenario but defined)
+feedintariff(simyear, power_plant, bregio, 'electricity')$(power_plant_type(power_plant, 'SUN') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    (cost_inv0(power_plant)*upfront_payment(power_plant))/(fullloadhours(simyear, power_plant, bregio, 'electricity')*
+    sum(yy$(ord(yy)<lifetime(power_plant)+1),1/((1+ir(power_plant))**yyy(yy))));
+
+* Support mechanism: upfront payment
+support_scen('upfront') = 1;
+support_scen('feedin') = 0;
+
+support_payment0(simyear,power_plant,bregio,'electricity')$(support_scen('upfront')=1 and power_plant_type(power_plant, 'SUN_ROOFTOP')) = 
+    cost_inv0(power_plant)*upfront_payment(power_plant);
+
+$goto END_SCENARIO
+
+*==============================================================================
+* SCENARIO 3: EXPONENTIAL DISCOUNTING + FEED-IN TARIFF
+*==============================================================================
+$label EXP_FEEDIN
+
+annuity(power_plant)$disc_scenario(power_plant, 'exponential') = 
+    ir(power_plant)/(1-(1+ir(power_plant))**(-lifetime(power_plant)));
+
+* For non-15-year scenarios, set annuity_support equal to annuity
+annuity_support(power_plant) = annuity(power_plant);
+
+feedintariff(simyear, power_plant, bregio, 'electricity')$(power_plant_type(power_plant, 'SUN') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    (cost_inv0(power_plant)*upfront_payment(power_plant))/(fullloadhours(simyear, power_plant, bregio, 'electricity')*
+    sum(yy$(ord(yy)<lifetime(power_plant)+1),1/((1+ir(power_plant))**yyy(yy))));
+
+support_scen('upfront') = 0;
+support_scen('feedin') = 1;
+
+support_payment0(simyear,power_plant,bregio,'electricity')$((support_scen('feedin')=1) and power_plant_type(power_plant, 'SUN_ROOFTOP') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    feedintariff(simyear, power_plant, bregio, 'electricity') * fullloadhours(simyear, power_plant, bregio, 'electricity') * (1/annuity(power_plant));
+
+$goto END_SCENARIO
+
+*==============================================================================
+* SCENARIO 4: HYPERBOLIC DISCOUNTING, NO SUPPORT (BASELINE)
+*==============================================================================
+$label HYP
+
+* Calculation of annuity factors for each technology using hyperbolic discounting
+loop(yy,
+    rn(yy) = (1+rh*yyy(yy))/(1+rh*(yyy(yy)-1))-1;
+    df(yy)$(ord(yy)=1) = 1/(1+rn(yy)*yyy(yy));
+    ann_sup(yy)$(ord(yy)=1) = 1/df(yy);
+    df(yy)$(ord(yy)>1) = df(yy-1)/(1+rn(yy));
+    ann_sup(yy)$(ord(yy)>1) = 1/((1/ann_sup(yy-1))+(df(yy-1)/(1+rn(yy))));
+    ann(yy)$(ord(yy)=1) = 1/(((1+rn(yy))-1)/((1+rn(yy))*rn(yy)));
+    ann(yy)$(ord(yy)>1) = 1/((1/ann(yy-1))+((rn(yy)/((1+rn(yy))*rn(yy)))/power(1+rn(yy),yyy(yy)-1)));
+); 
+
+loop(yy,    
+    annuity(power_plant)$(disc_scenario(power_plant, 'hyperbolic') and lifetime(power_plant)=yyy(yy)) = ann(yy);
+    annuity_sup(power_plant)$(disc_scenario(power_plant, 'hyperbolic') and lifetime(power_plant)=yyy(yy)) = ann_sup(yy);
+);
+
+* Exponential discounting for exponential technologies
+annuity(power_plant)$disc_scenario(power_plant, 'exponential') = 
+    ir(power_plant)/(1-(1+ir(power_plant))**(-lifetime(power_plant)));
+
+* For non-support scenarios, set annuity_support equal to annuity for consistency
+annuity_support(power_plant) = annuity(power_plant);
+
+feedintariff(simyear, power_plant, bregio, 'electricity')$(power_plant_type(power_plant, 'SUN_ROOFTOP') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    (cost_inv0(power_plant)*upfront_payment(power_plant))/(fullloadhours(simyear, power_plant, bregio, 'electricity')*
+    sum(yy$(ord(yy)<lifetime(power_plant)+1),1/((1+ir(power_plant))**yyy(yy))));
+
+* Support mechanism: NO support (baseline)
+support_scen('upfront') = 0;
+support_scen('feedin') = 0;
+    
+support_payment0(simyear,power_plant,bregio,'electricity')$(support_scen('upfront')=1 and power_plant_type(power_plant, 'SUN_ROOFTOP')) = 
+    cost_inv0(power_plant)*upfront_payment(power_plant);
+
+support_payment0(simyear,power_plant,bregio,'electricity')$((support_scen('feedin')=1) and power_plant_type(power_plant, 'SUN_ROOFTOP') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    feedintariff(simyear, power_plant, bregio, 'electricity') * fullloadhours(simyear, power_plant, bregio, 'electricity') * (1/annuity_sup(power_plant));
+
+$goto END_SCENARIO
+
+*==============================================================================
+* SCENARIO 5: HYPERBOLIC DISCOUNTING + UPFRONT PAYMENT
+*==============================================================================
+$label HYP_UPFRONT
+
+* Calculation of annuity factors for each technology using hyperbolic discounting
+loop(yy,
+    rn(yy) = (1+rh*yyy(yy))/(1+rh*(yyy(yy)-1))-1;
+    df(yy)$(ord(yy)=1) = 1/(1+rn(yy)*yyy(yy));
+    ann_sup(yy)$(ord(yy)=1) = 1/df(yy);
+    df(yy)$(ord(yy)>1) = df(yy-1)/(1+rn(yy));
+    ann_sup(yy)$(ord(yy)>1) = 1/((1/ann_sup(yy-1))+(df(yy-1)/(1+rn(yy))));
+    ann(yy)$(ord(yy)=1) = 1/(((1+rn(yy))-1)/((1+rn(yy))*rn(yy)));
+    ann(yy)$(ord(yy)>1) = 1/((1/ann(yy-1))+((rn(yy)/((1+rn(yy))*rn(yy)))/power(1+rn(yy),yyy(yy)-1)));
+); 
+
+loop(yy,    
+    annuity(power_plant)$(disc_scenario(power_plant, 'hyperbolic') and lifetime(power_plant)=yyy(yy)) = ann(yy);
+    annuity_sup(power_plant)$(disc_scenario(power_plant, 'hyperbolic') and lifetime(power_plant)=yyy(yy)) = ann_sup(yy);
+);
+
+* Exponential discounting for exponential technologies
+annuity(power_plant)$disc_scenario(power_plant, 'exponential') = 
+    ir(power_plant)/(1-(1+ir(power_plant))**(-lifetime(power_plant)));
+
+* For non-15-year scenarios, set annuity_support equal to annuity
+annuity_support(power_plant) = annuity(power_plant);
+
+feedintariff(simyear, power_plant, bregio, 'electricity')$(power_plant_type(power_plant, 'SUN') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    (cost_inv0(power_plant)*upfront_payment(power_plant))/(fullloadhours(simyear, power_plant, bregio, 'electricity')*
+    sum(yy$(ord(yy)<lifetime(power_plant)+1),1/((1+ir(power_plant))**yyy(yy))));
+
+support_scen('upfront') = 1;
+support_scen('feedin') = 0;
+    
+support_payment0(simyear,power_plant,bregio,'electricity')$(support_scen('upfront')=1 and power_plant_type(power_plant, 'SUN_ROOFTOP')) = 
+    cost_inv0(power_plant)*upfront_payment(power_plant);
+
+$goto END_SCENARIO
+
+*==============================================================================
+* SCENARIO 6: HYPERBOLIC DISCOUNTING + FEED-IN TARIFF
+*==============================================================================
+$label HYP_FEEDIN
+
+loop(yy,
+    rn(yy) = (1+rh*yyy(yy))/(1+rh*(yyy(yy)-1))-1;
+    df(yy)$(ord(yy)=1) = 1/(1+rn(yy)*yyy(yy));
+    ann_sup(yy)$(ord(yy)=1) = 1/df(yy);
+    df(yy)$(ord(yy)>1) = df(yy-1)/(1+rn(yy));
+    ann_sup(yy)$(ord(yy)>1) = 1/((1/ann_sup(yy-1))+(df(yy-1)/(1+rn(yy))));
+    ann(yy)$(ord(yy)=1) = 1/(((1+rn(yy))-1)/((1+rn(yy))*rn(yy)));
+    ann(yy)$(ord(yy)>1) = 1/((1/ann(yy-1))+((rn(yy)/((1+rn(yy))*rn(yy)))/power(1+rn(yy),yyy(yy)-1)));
+); 
+
+loop(yy,    
+    annuity(power_plant)$(disc_scenario(power_plant, 'hyperbolic') and lifetime(power_plant)=yyy(yy)) = ann(yy);
+    annuity_sup(power_plant)$(disc_scenario(power_plant, 'hyperbolic') and lifetime(power_plant)=yyy(yy)) = ann_sup(yy);
+);
+
+annuity(power_plant)$disc_scenario(power_plant, 'exponential') = 
+    ir(power_plant)/(1-(1+ir(power_plant))**(-lifetime(power_plant)));
+
+* For non-15-year scenarios, set annuity_support equal to annuity
+annuity_support(power_plant) = annuity(power_plant);
+
+feedintariff(simyear, power_plant, bregio, 'electricity')$(power_plant_type(power_plant, 'SUN') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    (cost_inv0(power_plant)*upfront_payment(power_plant))/(fullloadhours(simyear, power_plant, bregio, 'electricity')*
+    sum(yy$(ord(yy)<lifetime(power_plant)+1),1/((1+ir(power_plant))**yyy(yy))));
+
+support_scen('upfront') = 0;
+support_scen('feedin') = 1;
+
+support_payment0(simyear,power_plant,bregio,'electricity')$((support_scen('feedin')=1) and power_plant_type(power_plant, 'SUN_ROOFTOP') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    feedintariff(simyear, power_plant, bregio, 'electricity') * fullloadhours(simyear, power_plant, bregio, 'electricity') * (1/annuity_sup(power_plant));
+
+$goto END_SCENARIO
+
+*==============================================================================
+* SCENARIO 7: HYPERBOLIC DISCOUNTING + FEED-IN WITH EQUIVALENT ANNUITY
+*==============================================================================
+$label HYP_FEEDIN_EQ
+
+* Hyperbolische Annuitäten für alle Technologien (wie in hyp und hyp_feedin)
+loop(yy,
+    rn(yy) = (1+rh*yyy(yy))/(1+rh*(yyy(yy)-1))-1;
+    df(yy)$(ord(yy)=1) = 1/(1+rn(yy)*yyy(yy));
+    ann_sup(yy)$(ord(yy)=1) = 1/df(yy);
+    df(yy)$(ord(yy)>1) = df(yy-1)/(1+rn(yy));
+    ann_sup(yy)$(ord(yy)>1) = 1/((1/ann_sup(yy-1))+(df(yy-1)/(1+rn(yy))));
+    ann(yy)$(ord(yy)=1) = 1/(((1+rn(yy))-1)/((1+rn(yy))*rn(yy)));
+    ann(yy)$(ord(yy)>1) = 1/((1/ann(yy-1))+((rn(yy)/((1+rn(yy))*rn(yy)))/power(1+rn(yy),yyy(yy)-1)));
+); 
+
+loop(yy,    
+    annuity(power_plant)$(disc_scenario(power_plant, 'hyperbolic') and lifetime(power_plant)=yyy(yy)) = ann(yy);
+    annuity_sup(power_plant)$(disc_scenario(power_plant, 'hyperbolic') and lifetime(power_plant)=yyy(yy)) = ann_sup(yy);
+);
+
+* Exponentielle Annuitäten für Technologien mit exponentieller Diskontierung
+annuity(power_plant)$disc_scenario(power_plant, 'exponential') = 
+    ir(power_plant)/(1-(1+ir(power_plant))**(-lifetime(power_plant)));
+
+* Für Support-Zahlungen wird die hyperbolische Annuität verwendet
+annuity_support(power_plant) = annuity(power_plant);
+
+* Fester Annuitätsfaktor für die Berechnung des Feed-in-Tarifs (äquivalent zum exp_feedin_eq)
+* Hinweis: Der Wert 0.120140975938864 entspricht dem verwendeten Zinssatz (z.B. 12% auf 20 Jahre)
+feedintariff(simyear, power_plant, bregio, 'electricity')$(power_plant_type(power_plant, 'SUN_ROOFTOP') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    (cost_inv0(power_plant)*upfront_payment(power_plant))/(fullloadhours(simyear, power_plant, bregio, 'electricity')* (1/0.120140975938864));
+
+* Support-Mechanismus: Feed-in Tarif
+support_scen('upfront') = 0;
+support_scen('feedin') = 1;
+
+* NPV der Support-Zahlungen: Feed-in-Zahlungen über hyperbolische Annuität abgeschrieben
+support_payment0(simyear,power_plant,bregio,'electricity')$((support_scen('feedin')=1) and power_plant_type(power_plant, 'SUN_ROOFTOP') and fullloadhours(simyear, power_plant, bregio, 'electricity')>1) = 
+    feedintariff(simyear, power_plant, bregio, 'electricity') * fullloadhours(simyear, power_plant, bregio, 'electricity') * (1/annuity_sup(power_plant));
+
+$goto END_SCENARIO
+
+*==============================================================================
+* END OF SCENARIO SELECTION
+*==============================================================================
+$label END_SCENARIO
+
+*---------------------------- For discounting (MB) --------------------------------------------
+
+*---------------------------- For discounting (MB) --------------------------------------------
+Parameters
+    max_cap_PV(plant_type,zone) "total potential for solar capacity expansion"
+    batt_pros_per_rooftop_pv "minimum prosumer battery build per unit of new rooftop PV capacity"
+    ratio_battU_per_pvU(heat_regio) "minimum BATT_STO_UTILITY capacity per SUN_UTILITY capacity"
+
+    out_cost_support_payments_irr(simyear,power_plant,heat_regio)
+    out_cost_support_payments_sunk(simyear,power_plant, heat_regio)
+    out_cost_support_total_npv(simyear,power_plant,heat_regio) "NPV of grant payments"
+    out_cost_support_total_npv_household(simyear,power_plant, heat_regio)
+;
+    
+Scalar
+    fit_equiv_markup_gov "government-side markup for hyp_feedin_eq due to higher FiT" /1.31633613436663/;
+*---------------------------- For discounting (MB) --------------------------------------------
+
 
 *---------------------------- Parameters for output --------------------------------------------
 Parameters
@@ -257,6 +616,14 @@ equations
          eq_fix_cost_irr         "irreversible fixed costs incurred in the first year"
          eq_fix_cost_sunk        "irreversible fixed costs attributed to the remained lifetime except the first year"
          eq_fix_cost_rev         "reversible fixed costs dependent on the installed capacity"       
+
+*---------------------------- For discounting (MB) --------------------------------------------
+* New equations: couple battery and PV build-out, and split the battery reservoir limit by type.
+         eq_batt_pros_build_link(heat_regio) "if utility battery is expanded, prosumer battery must also be expanded proportionally"
+         eq_MaxVolumeBATT_UTILITY
+         eq_MaxVolumeBATT_PROSUMER
+         eq_battU_pvU_link(heat_regio) "BATT_STO_UTILITY must be built proportionally to SUN_UTILITY"
+*---------------------------- For discounting (MB) --------------------------------------------
 *-----------------------------------------------------------------------------------------------
 *------------------------------------ Restrictions ---------------------------------------------
          eq_supply(node, time, month, power_plant, heat_regio) "power supply based on monthly availability"
@@ -470,14 +837,30 @@ eq_var_cost_co2..
 ;
 *Note: inv_plant_regio has been described in the loop via b_inv_plant_regio and is (or can be) different depending on simyear.
 *In contrast, inv_plant_regio2 is constant (for each power plant and heat region) independently of simyear.
+
+*---------------------------- For discounting (MB) --------------------------------------------
+* For support scenarios, the granted support reduces the capital base that households annualise
 eq_fix_cost_irr..
-         var_fix_cost_irr =e= sum((inv_plant_regio(inv_plant,heat_regio)), annuity(inv_plant)*cost_inv(inv_plant)*1000*v_cap_new(inv_plant_regio))
+         var_fix_cost_irr =e= sum((inv_plant_regio(inv_plant,heat_regio)), annuity(inv_plant)*(cost_inv(inv_plant)-support_payment(inv_plant,heat_regio))*1000*v_cap_new(inv_plant_regio))
 ;
 
 eq_fix_cost_sunk..
-         v_fix_cost_sunk =e= sum((inv_plant_regio2(inv_plant,heat_regio)), annuity(inv_plant)*cost_inv(inv_plant)*1000*cap_n_sunk(inv_plant_regio2))
-                         + sum((exist_plant(power_plant,heat_regio)), annuity(power_plant)*cost_inv(power_plant)*1000*cap_ref(exist_plant))
+         v_fix_cost_sunk =e= sum((inv_plant_regio2(inv_plant,heat_regio)), annuity(inv_plant)*(cost_inv(inv_plant)-support_payment(inv_plant,heat_regio))*1000*cap_n_sunk(inv_plant_regio2))
+                           + sum((exist_plant(power_plant,heat_regio)), annuity(power_plant)*(cost_inv(power_plant)-support_payment(power_plant,heat_regio))*1000*cap_ref(exist_plant))
 ;
+
+* Couple prosumer battery build to new rooftop PV (equality) and utility battery to utility PV (lower bound).
+eq_batt_pros_build_link(heat_regio)..
+  sum(exist_plant(power_plant,heat_regio)$power_plant_type(power_plant,'BATT_STO_PROSUMER'), v_cap(power_plant,heat_regio))
+   =e= batt_pros_per_rooftop_pv * sum(exist_plant(power_plant,heat_regio)$power_plant_type(power_plant,'SUN_ROOFTOP'), v_cap(power_plant,heat_regio))
+;
+
+eq_battU_pvU_link(heat_regio)..
+  sum(exist_plant(power_plant,heat_regio)$power_plant_type(power_plant,'BATT_STO_UTILITY'), v_cap(power_plant,heat_regio))
+   =g= ratio_battU_per_pvU(heat_regio) * sum(exist_plant(power_plant,heat_regio)$power_plant_type(power_plant,'SUN_UTILITY'), v_cap(power_plant,heat_regio))
+;
+*---------------------------- For discounting (MB) --------------------------------------------
+
 
 eq_fix_cost_rev..
          var_fix_cost_rev =e= sum(exist_plant(power_plant,heat_regio), cost_fix(power_plant)*1000*v_cap(exist_plant))
@@ -630,8 +1013,12 @@ $ifi '%h2_yearly%' == Yes               sum(exist_plant(power_plant, heat_regio)
 $ifi '%h2_yearly%' == Yes                   v_production(node, time, exist_plant, 'electricity') / eff_plant(power_plant, heat_regio))))
 $ifi '%h2_yearly%' == Yes                    ;
 
+*---------------------------- For discounting (MB) --------------------------------------------
+*If h2_yearly = Yes, sum yearly H2 imports across designated import zones and enforce a lower bound of max_cap_imports (note: =G= sets a minimum; use =L= for an upper cap)
 $ifi '%h2_yearly%' == Yes eq_max_import..
-$ifi '%h2_yearly%' == Yes   sum(zone$h2_import_zones(zone), v_import_h2(zone)) =L= max_cap_imports;
+*$ifi '%h2_yearly%' == Yes   sum(zone$h2_import_zones(zone), v_import_h2(zone)) =L= max_cap_imports;
+$ifi '%h2_yearly%' == Yes   sum(zone$h2_import_zones(zone), v_import_h2(zone)) =G= max_cap_imports;
+*---------------------------- For discounting (MB) --------------------------------------------
 
 *H2 demand on a time segment basis
 $ifi NOT '%h2_yearly%' == Yes       eq_demand_h2(node,time, zone)$(node_time(node, time))..
@@ -730,9 +1117,18 @@ $OFFTEXT
 eq_MaxVolume(node, time, exist_plant(power_plant, heat_regio))$(node_time(node, time) and power_plant_type(power_plant, 'IGELECSTORAGE') and not power_plant_type(power_plant, 'BATT_STO'))..
           v_fill_level_h(node, time, exist_plant) =l= fill_level_max(exist_plant) * iLoadPoss(time, power_plant);
           
+*---------------------------- For discounting (MB) --------------------------------------------
 *fullload_discharge represents the ratio of storage capacity and power (duration of discharge at full load)
-eq_MaxVolumeBATT(node, time, exist_plant(power_plant, heat_regio))$(node_time(node, time) and power_plant_type(power_plant, 'BATT_STO'))..
-         v_fill_level_h(node, time, exist_plant) =l= v_cap(exist_plant) * fullload_discharge * iLoadPoss(time, power_plant);
+*eq_MaxVolumeBATT(node, time, exist_plant(power_plant, heat_regio))$(node_time(node, time) and power_plant_type(power_plant, 'BATT_STO'))..
+*         v_fill_level_h(node, time, exist_plant) =l= v_cap(exist_plant) * fullload_discharge * iLoadPoss(time, power_plant);
+
+* Reservoir limit now differentiated by battery type: utility (4h) vs prosumer (2.5h).
+eq_MaxVolumeBATT_UTILITY(node, time, exist_plant(power_plant, heat_regio))$(node_time(node, time) and power_plant_type(power_plant, 'BATT_STO_UTILITY'))..
+         v_fill_level_h(node, time, exist_plant) =l= v_cap(exist_plant) * fullload_discharge_utility * iLoadPoss(time, power_plant);
+
+eq_MaxVolumeBATT_PROSUMER(node, time, exist_plant(power_plant, heat_regio))$(node_time(node, time) and power_plant_type(power_plant, 'BATT_STO_PROSUMER'))..
+         v_fill_level_h(node, time, exist_plant) =l= v_cap(exist_plant) * fullload_discharge_prosumer * iLoadPoss(time, power_plant);
+*---------------------------- For discounting (MB) --------------------------------------------
 
 $ONTEXT
 *H2 storage max volume
@@ -752,12 +1148,12 @@ eq_MaxChargePower(node, time,month, exist_plant(power_plant, heat_regio))$(node_
 eq_MaxChargePower_Sim(node, time,month)$(node_time(node, time) and month_time(month, time))..
 
         sum(exist_plant(power_plant, heat_regio)$(power_plant_type(power_plant, 'IGELECSTORAGE')
-	and not power_plant_type(power_plant, 'BATT_STO') and not power_plant_type(power_plant, 'HYDR_PS')),
-	v_pump(node, time, exist_plant) + v_pump_standing_neg(node,time,exist_plant))
+    and not power_plant_type(power_plant, 'BATT_STO') and not power_plant_type(power_plant, 'HYDR_PS')),
+    v_pump(node, time, exist_plant) + v_pump_standing_neg(node,time,exist_plant))
 
-	=l= sum(exist_plant(power_plant, heat_regio)$(power_plant_type(power_plant, 'IGELECSTORAGE')
-	and not power_plant_type(power_plant, 'BATT_STO') and not power_plant_type(power_plant, 'HYDR_PS')),
-	v_cap(exist_plant)) * 0.1;
+    =l= sum(exist_plant(power_plant, heat_regio)$(power_plant_type(power_plant, 'IGELECSTORAGE')
+    and not power_plant_type(power_plant, 'BATT_STO') and not power_plant_type(power_plant, 'HYDR_PS')),
+    v_cap(exist_plant)) * 0.1;
 
 *MaxChargePower for IGPTG
 eq_MaxChargePower_ptg(node, time, month, exist_plant(power_plant, heat_regio))$(node_time(node, time) and month_time(month, time) and power_plant_type(power_plant, 'IGPTG'))..
@@ -1058,6 +1454,11 @@ eq_fix_cost_irr
 eq_fix_cost_sunk
 eq_fix_cost_rev
 
+*---------------------------- For discounting (MB) --------------------------------------------
+eq_batt_pros_build_link
+eq_battU_pvU_link
+*---------------------------- For discounting (MB) --------------------------------------------
+
 eq_cur_cost
 eq_cost_import_h2
 
@@ -1091,7 +1492,12 @@ eq_MaxChargePower
 eq_MaxChargePower_Sim
 eq_MaxChargePower_ptg
 eq_MaxDischargePower
-eq_MaxVolumeBATT
+
+*---------------------------- For discounting (MB) --------------------------------------------
+*eq_MaxVolumeBATT
+eq_MaxVolumeBATT_UTILITY
+eq_MaxVolumeBATT_PROSUMER
+*---------------------------- For discounting (MB) --------------------------------------------
 
 eq_pump_standing_pos
 eq_supply_river
@@ -1138,7 +1544,9 @@ eq_co2_bound2
 *eq_pump_onlyPumpH2
 
 *eq_import_constraint
-*eq_max_import
+*---------------------------- For discounting (MB) --------------------------------------------
+eq_max_import
+*---------------------------- For discounting (MB) --------------------------------------------
 *eq_min_gen
 /;
 plp_static.optfile = 26;
@@ -1193,6 +1601,14 @@ loop (simyear,
 
       max_cap(primary_energy, zone) = bmax_cap(simyear,primary_energy, zone);
       max_cap_wind(plant_type, zone) = bmax_cap_wind(simyear,plant_type, zone);
+
+*---------------------------- For discounting (MB) --------------------------------------------
+* Read scenario inputs that drive PV/battery differentiation and the battery-PV coupling ratios.
+      max_cap_PV(plant_type, zone) = bmax_cap_PV(simyear,plant_type,zone);
+      batt_pros_per_rooftop_pv = b_batt_pros_per_rooftop_pv(simyear);
+      ratio_battU_per_pvU(heat_regio) = b_ratio_battU_per_pvU(simyear,heat_regio);
+*---------------------------- For discounting (MB) --------------------------------------------
+
       h2_costs_import = b_h2_costs_import(simyear);
       max_cap_imports = b_max_cap_imports(simyear);
 
@@ -1220,6 +1636,11 @@ loop (simyear,
       demand(time,heat_regio,'heat')= demand_Y(simyear,time,heat_regio,'heat') + ex_foreign_trade(simyear,time,heat_regio,'heat');
       demand(time,zone,'h2')= demand_Y(simyear,time,zone,'h2')+ ex_foreign_trade(simyear,time,zone,'h2');
       demand_emob_fix(time,zone,product) = b_demand_emob_fix(simyear, time,zone,product);
+
+*---------------------------- For discounting (MB) --------------------------------------------
+* Pick the precomputed support payment (NPV per kW) for the current simulation year.
+      support_payment(power_plant,bregio) = support_payment0(simyear,power_plant,bregio,'electricity');
+*---------------------------- For discounting (MB) --------------------------------------------
 
 *calculation of operating costs including fuel costs and miscellaneous costs
          loop (exist_plant(power_plant, heat_regio),
@@ -1581,6 +2002,33 @@ $ifi NOT '%h2_yearly%' == Yes    prob_node(node) * hour_resolution(time) * freq_
         out_fill_level_h_exp(simyear, time, exist_plant) = sum(node$node_time(node,time), prob_node(node)* v_fill_level_h.l(node, time, exist_plant));
 
         out_demand_max(simyear, bregio, product) = v_demand_max.l(bregio,product);
+
+*---------------------------- For discounting (MB) --------------------------------------------
+* Post-process support expenditure: government NPV
+* perceived by present-biased households (hyperbolic). The hyp_feedin_eq case adds the FiT markup.
+* Annualized support payments
+$ifthenI "%SCENARIO%" == "hyp_feedin_eq"
+    out_cost_support_payments_irr(simyear,power_plant,heat_regio) $inv_plant_regio2(power_plant,heat_regio) = 
+        fit_equiv_markup_gov * annuity(power_plant) * support_payment(power_plant,heat_regio) * 1000 * v_cap_new.l(power_plant,heat_regio);
+    
+    out_cost_support_payments_sunk(simyear,exist_plant(power_plant,heat_regio)) = 
+        fit_equiv_markup_gov * annuity(power_plant) * support_payment(power_plant,heat_regio) * 1000 * (cap_n_sunk(exist_plant) - v_cap_new.l(exist_plant) + cap_ref(exist_plant));
+$else
+    out_cost_support_payments_irr(simyear,power_plant,heat_regio) $inv_plant_regio2(power_plant,heat_regio) = 
+        annuity(power_plant) * support_payment(power_plant,heat_regio) * 1000 * v_cap_new.l(power_plant,heat_regio);
+    
+    out_cost_support_payments_sunk(simyear,exist_plant(power_plant,heat_regio)) = 
+        annuity(power_plant) * support_payment(power_plant,heat_regio) * 1000 * (cap_n_sunk(exist_plant) - v_cap_new.l(exist_plant) + cap_ref(exist_plant));
+$endIf
+
+* Government perspective: NPV of support payments
+    out_cost_support_total_npv(simyear,power_plant,heat_regio) =
+        (1 / ((1 + ir('SUN_ROOFTOP'))**(numyear(simyear)-2024))) / annuity('SUN_ROOFTOP') * (out_cost_support_payments_irr(simyear,power_plant,heat_regio) + out_cost_support_payments_sunk(simyear,power_plant,heat_regio));
+
+* Household perspective: perceived NPV of support payments
+    out_cost_support_total_npv_household(simyear,power_plant,heat_regio)$inv_plant_regio2(power_plant,heat_regio) =
+        (1 / (1 + rh * (numyear(simyear)-2024))) * support_payment(power_plant,heat_regio) * 1000 * (cap_n_sunk(power_plant,heat_regio) + cap_ref(power_plant,heat_regio));
+*---------------------------- For discounting (MB) --------------------------------------------
 
 *------------------------ Writing modelling results in GDX file ----------------
           

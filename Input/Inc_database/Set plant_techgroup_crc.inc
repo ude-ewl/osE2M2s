@@ -1,0 +1,3 @@
+BATT_STO_PROSUMER.dummyValue
+BATT_STO_UTILITY.dummyValue
+
