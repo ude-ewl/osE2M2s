@@ -46,7 +46,7 @@ SRE_effect_strength /0.077/
 *SRE_effect_strength /0.33/
 ```
 
-The value <code>/0/</code> can be used for the reference scenario/baseline run without rebound. On a machine that meets the recommended system requirements, the full model run should be completed in about an hour.
+The value <code>/0/</code> can be used for the reference scenario/baseline run without rebound in <kbd>simultaneousSRE_E2M2s.gms</kbd> or <kbd>sweepingSRE_E2M2s.gms</kbd>. The baseline run should not be performed with <kbd>dynamicSRE_E2M2s.gms</kbd>. On a machine that meets the recommended system requirements, the full model run should be completed in about an hour.
 
 ### Inspecting results
 Once the model run completes, all results are written to the <kbd>Output/</kbd> directory in GDX format. The visualizations used in the paper can be reproduced with the Python materials in the <kbd>Supplementary material/</kbd> folders; geospatial figures include the necessary shapefiles and a <kbd>QGIS</kbd> project. For quick spreadsheet analysis, a curated summary of all results is available in <kbd>Supplementary material/Final_results_SRE.xlsx</kbd>.

@@ -250,7 +250,6 @@ scalar
 *The value 0 can be used for the reference scenario without any rebound effect
 *Note: The selected effect strength automatically applies to the dynamic profile
 
-*SRE_effect_strength /0/
 *SRE_effect_strength /0.077/
 *SRE_effect_strength /0.172/
 *SRE_effect_strength /0.33/
